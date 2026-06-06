@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import sqlite3
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
@@ -17,6 +18,13 @@ from aiogram.types import (
     Message,
 )
 from dotenv import load_dotenv
+
+from repository import (
+    InMemoryRecommendationRepository,
+    MOCK_RECOMMENDATIONS,
+    Recommendation,
+    RecommendationRepository,
+)
 
 
 INSTRUCTION_TEXT = (
@@ -93,6 +101,20 @@ QUESTIONS: List[Question] = [
 QUESTIONS_BY_NUMBER = {q.number: q for q in QUESTIONS}
 TOTAL_QUESTIONS = len(QUESTIONS)
 DB_PATH = "bot_storage.sqlite3"
+PAGE_SIZE = 10
+
+VIEW_STATE_AWAIT_MIN = "await_min"
+VIEW_STATE_AWAIT_MAX = "await_max"
+
+
+RECOMMENDATIONS_REPO: RecommendationRepository = InMemoryRecommendationRepository(
+    MOCK_RECOMMENDATIONS
+)
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {row[1] for row in rows}
 
 
 def init_db() -> None:
@@ -108,6 +130,19 @@ def init_db() -> None:
             )
             """
         )
+
+        existing = _table_columns(conn, "user_progress")
+        migrations: List[Tuple[str, str]] = [
+            ("sort_order", "TEXT NOT NULL DEFAULT 'asc'"),
+            ("price_min", "INTEGER"),
+            ("price_max", "INTEGER"),
+            ("view_state", "TEXT"),
+            ("page", "INTEGER NOT NULL DEFAULT 0"),
+        ]
+        for column, ddl in migrations:
+            if column not in existing:
+                conn.execute(f"ALTER TABLE user_progress ADD COLUMN {column} {ddl}")
+
         conn.commit()
 
 
@@ -116,7 +151,8 @@ def get_progress(user_id: int) -> dict:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             """
-            SELECT user_id, current_question, answers_json, completed, result_text
+            SELECT user_id, current_question, answers_json, completed, result_text,
+                   sort_order, price_min, price_max, view_state, page
             FROM user_progress
             WHERE user_id = ?
             """,
@@ -130,6 +166,11 @@ def get_progress(user_id: int) -> dict:
             "answers": {},
             "completed": False,
             "result_text": None,
+            "sort_order": "asc",
+            "price_min": None,
+            "price_max": None,
+            "view_state": None,
+            "page": 0,
         }
 
     return {
@@ -138,6 +179,11 @@ def get_progress(user_id: int) -> dict:
         "answers": json.loads(row["answers_json"]),
         "completed": bool(row["completed"]),
         "result_text": row["result_text"],
+        "sort_order": row["sort_order"] or "asc",
+        "price_min": row["price_min"],
+        "price_max": row["price_max"],
+        "view_state": row["view_state"],
+        "page": row["page"] or 0,
     }
 
 
@@ -184,27 +230,85 @@ def reset_progress(user_id: int) -> None:
         completed=False,
         result_text=None,
     )
+    update_view_settings(
+        user_id,
+        sort_order="asc",
+        price_min=None,
+        price_max=None,
+        view_state=None,
+        page=0,
+    )
 
-def process_test_results(answers: Dict[str, str]) -> str:
+
+def update_view_settings(user_id: int, **fields: Any) -> None:
+    """Точечное обновление view-настроек пользователя.
+
+    Допустимые поля: sort_order, price_min, price_max, view_state, page.
     """
-    Заглушка.
+    allowed = {"sort_order", "price_min", "price_max", "view_state", "page"}
+    unknown = set(fields) - allowed
+    if unknown:
+        raise ValueError(f"Unknown view settings: {unknown}")
 
-    answers хранится как словарь:
-    {
-        "1": "А",
-        "2": "Б",
-        ...
-    }
+    if not fields:
+        return
 
-    Возвращает строку вида:
-    А,Б,А,А,...
+    with sqlite3.connect(DB_PATH) as conn:
+        # Гарантируем существование строки.
+        conn.execute(
+            """
+            INSERT INTO user_progress (user_id)
+            VALUES (?)
+            ON CONFLICT(user_id) DO NOTHING
+            """,
+            (user_id,),
+        )
+
+        assignments = ", ".join(f"{name} = ?" for name in fields)
+        values = list(fields.values()) + [user_id]
+        conn.execute(
+            f"UPDATE user_progress SET {assignments} WHERE user_id = ?",
+            values,
+        )
+        conn.commit()
+
+
+def serialize_result_ids(ids: List[int]) -> str:
+    return json.dumps(ids, ensure_ascii=False)
+
+
+def deserialize_result_ids(raw: Optional[str]) -> List[int]:
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        # Старый формат "А,Б,А,..." - сохранение от прошлой версии бота.
+        return []
+    if not isinstance(data, list):
+        return []
+    result: List[int] = []
+    for item in data:
+        try:
+            result.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def process_test_results(
+    answers: Dict[str, str],
+    repo: RecommendationRepository,
+) -> List[int]:
     """
-    ordered_answers = [
-        answers[str(question_number)]
-        for question_number in range(1, TOTAL_QUESTIONS + 1)
-    ]
+    Заглушка под нейронку.
 
-    return ",".join(ordered_answers)
+    Сейчас просто возвращает все id из репозитория. Когда появится реальная
+    модель, эта функция будет вызывать её и возвращать отобранные id.
+    """
+    _ = answers  # пока не используем
+    return [item.id for item in repo.list_all()]
+
 
 def start_keyboard(has_progress: bool, completed: bool) -> InlineKeyboardMarkup:
     buttons = []
@@ -265,6 +369,7 @@ def finish_keyboard() -> InlineKeyboardMarkup:
         ]
     )
 
+
 def build_question_text(question: Question) -> str:
     return (
         f"Вопрос {question.number} из {TOTAL_QUESTIONS}\n\n"
@@ -272,6 +377,172 @@ def build_question_text(question: Question) -> str:
         f"Б) {question.b}\n\n"
         "Выберите один вариант:"
     )
+
+
+def _format_price(value: Optional[int]) -> str:
+    if value is None:
+        return "—"
+    return f"{value:,} ₽".replace(",", " ")
+
+
+def _format_filter(price_min: Optional[int], price_max: Optional[int]) -> str:
+    if price_min is None and price_max is None:
+        return "не задан"
+    return f"{_format_price(price_min)} – {_format_price(price_max)}"
+
+
+def _sort_arrow(sort_order: str) -> str:
+    return "↑" if sort_order == "asc" else "↓"
+
+
+def build_results_view(user_id: int) -> Tuple[str, InlineKeyboardMarkup]:
+    progress = get_progress(user_id)
+
+    result_ids = deserialize_result_ids(progress["result_text"])
+    if not result_ids:
+        text = (
+            "Не удалось загрузить ваши результаты — возможно, сохранение в "
+            "старом формате. Пожалуйста, пройдите тест заново."
+        )
+        return text, finish_keyboard()
+
+    sort_order = progress["sort_order"]
+    price_min = progress["price_min"]
+    price_max = progress["price_max"]
+    page = progress["page"]
+
+    query = RECOMMENDATIONS_REPO.query(
+        ids=result_ids,
+        price_min=price_min,
+        price_max=price_max,
+        sort_order=sort_order,
+        offset=page * PAGE_SIZE,
+        limit=PAGE_SIZE,
+    )
+
+    total = query.total
+    total_pages = max(1, math.ceil(total / PAGE_SIZE)) if total > 0 else 1
+
+    # Clamp page, если фильтр изменился и page стал невалиден.
+    if page >= total_pages:
+        page = total_pages - 1
+        update_view_settings(user_id, page=page)
+        query = RECOMMENDATIONS_REPO.query(
+            ids=result_ids,
+            price_min=price_min,
+            price_max=price_max,
+            sort_order=sort_order,
+            offset=page * PAGE_SIZE,
+            limit=PAGE_SIZE,
+        )
+
+    if total == 0:
+        text = (
+            "По заданному фильтру ничего не найдено.\n"
+            f"Фильтр: {_format_filter(price_min, price_max)}\n\n"
+            "Попробуйте изменить или сбросить фильтр."
+        )
+    else:
+        sort_label = (
+            "по возрастанию цены" if sort_order == "asc" else "по убыванию цены"
+        )
+        text = (
+            f"Найдено результатов: {total}\n"
+            f"Сортировка: {_sort_arrow(sort_order)} {sort_label}\n"
+            f"Фильтр: {_format_filter(price_min, price_max)}\n"
+            f"Страница: {page + 1} / {total_pages}\n\n"
+            "Нажмите на интересующий вариант, чтобы посмотреть подробности."
+        )
+
+    rows: List[List[InlineKeyboardButton]] = []
+
+    for item in query.items:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{item.title} — {_format_price(item.price)}",
+                    callback_data=f"rec:{item.id}",
+                )
+            ]
+        )
+
+    # Пагинация.
+    if total_pages > 1:
+        prev_data = "page:prev" if page > 0 else "page:noop"
+        next_data = "page:next" if page < total_pages - 1 else "page:noop"
+        rows.append(
+            [
+                InlineKeyboardButton(text="◀", callback_data=prev_data),
+                InlineKeyboardButton(
+                    text=f"{page + 1}/{total_pages}",
+                    callback_data="page:noop",
+                ),
+                InlineKeyboardButton(text="▶", callback_data=next_data),
+            ]
+        )
+
+    # Управление.
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=f"Сортировка {_sort_arrow(sort_order)}",
+                callback_data="sort:toggle",
+            ),
+            InlineKeyboardButton(text="Фильтр цены", callback_data="filter:open"),
+        ]
+    )
+
+    if price_min is not None or price_max is not None:
+        rows.append(
+            [InlineKeyboardButton(text="Сбросить фильтр", callback_data="filter:reset")]
+        )
+
+    rows.append(
+        [InlineKeyboardButton(text="Пройти тест заново", callback_data="restart_test")]
+    )
+
+    return text, InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def build_recommendation_view(rec: Recommendation) -> Tuple[str, InlineKeyboardMarkup]:
+    text = (
+        f"{rec.title}\n\n"
+        f"{rec.description}\n\n"
+        f"Стоимость: {_format_price(rec.price)}"
+    )
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="← К списку", callback_data="results:back")]
+        ]
+    )
+    return text, keyboard
+
+
+def build_filter_menu(user_id: int) -> Tuple[str, InlineKeyboardMarkup]:
+    progress = get_progress(user_id)
+    price_min = progress["price_min"]
+    price_max = progress["price_max"]
+
+    text = (
+        "Фильтр по цене.\n\n"
+        f"Текущий минимум: {_format_price(price_min)}\n"
+        f"Текущий максимум: {_format_price(price_max)}\n\n"
+        "Выберите, что хотите изменить."
+    )
+
+    rows: List[List[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="Задать минимум", callback_data="filter:set_min")],
+        [InlineKeyboardButton(text="Задать максимум", callback_data="filter:set_max")],
+    ]
+    if price_min is not None or price_max is not None:
+        rows.append(
+            [InlineKeyboardButton(text="Сбросить", callback_data="filter:reset")]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="← Назад к результатам", callback_data="results:back")]
+    )
+
+    return text, InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 async def send_question(message_or_callback: Message | CallbackQuery, user_id: int) -> None:
@@ -286,6 +557,17 @@ async def send_question(message_or_callback: Message | CallbackQuery, user_id: i
     text = build_question_text(question)
     keyboard = question_keyboard(question)
 
+    if isinstance(message_or_callback, CallbackQuery):
+        await message_or_callback.message.edit_text(text, reply_markup=keyboard)
+    else:
+        await message_or_callback.answer(text, reply_markup=keyboard)
+
+
+async def _send_or_edit(
+    message_or_callback: Message | CallbackQuery,
+    text: str,
+    keyboard: InlineKeyboardMarkup,
+) -> None:
     if isinstance(message_or_callback, CallbackQuery):
         await message_or_callback.message.edit_text(text, reply_markup=keyboard)
     else:
@@ -314,26 +596,29 @@ async def finish_test(message_or_callback: Message | CallbackQuery, user_id: int
 
         return
 
-    result_text = process_test_results(answers)
+    result_ids = process_test_results(answers, RECOMMENDATIONS_REPO)
 
     save_progress(
         user_id=user_id,
         current_question=TOTAL_QUESTIONS + 1,
         answers=answers,
         completed=True,
-        result_text=result_text,
+        result_text=serialize_result_ids(result_ids),
+    )
+    # Сбрасываем view-настройки на дефолтные для новой выдачи.
+    update_view_settings(
+        user_id,
+        sort_order="asc",
+        price_min=None,
+        price_max=None,
+        view_state=None,
+        page=0,
     )
 
-    text = (
-        "Тест завершен.\n\n"
-        "Результат обработки:\n"
-        f"{result_text}"
-    )
+    text, keyboard = build_results_view(user_id)
+    intro = "Тест завершён. Вот подобранные для вас варианты:\n\n"
+    await _send_or_edit(message_or_callback, intro + text, keyboard)
 
-    if isinstance(message_or_callback, CallbackQuery):
-        await message_or_callback.message.edit_text(text, reply_markup=finish_keyboard())
-    else:
-        await message_or_callback.answer(text, reply_markup=finish_keyboard())
 
 router_dp = Dispatcher()
 
@@ -394,17 +679,132 @@ async def on_show_result(callback: CallbackQuery) -> None:
 
     if not progress["completed"]:
         await callback.message.edit_text(
-            "Тест еще не завершен.",
+            "Тест ещё не завершён.",
             reply_markup=start_keyboard(has_progress=True, completed=False),
         )
         await callback.answer()
         return
 
+    text, keyboard = build_results_view(user_id)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router_dp.callback_query(F.data == "results:back")
+async def on_results_back(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id
+    # На всякий случай очищаем состояние ожидания ввода.
+    update_view_settings(user_id, view_state=None)
+    text, keyboard = build_results_view(user_id)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router_dp.callback_query(F.data.startswith("rec:"))
+async def on_recommendation_details(callback: CallbackQuery) -> None:
+    try:
+        _, rec_id_raw = callback.data.split(":", 1)
+        rec_id = int(rec_id_raw)
+    except ValueError:
+        await callback.answer("Некорректный идентификатор.", show_alert=True)
+        return
+
+    rec = RECOMMENDATIONS_REPO.get_by_id(rec_id)
+    if rec is None:
+        await callback.answer("Вариант не найден.", show_alert=True)
+        return
+
+    text, keyboard = build_recommendation_view(rec)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router_dp.callback_query(F.data == "sort:toggle")
+async def on_sort_toggle(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id
+    progress = get_progress(user_id)
+    new_order = "desc" if progress["sort_order"] == "asc" else "asc"
+    update_view_settings(user_id, sort_order=new_order, page=0)
+
+    text, keyboard = build_results_view(user_id)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router_dp.callback_query(F.data == "page:prev")
+async def on_page_prev(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id
+    progress = get_progress(user_id)
+    new_page = max(0, progress["page"] - 1)
+    update_view_settings(user_id, page=new_page)
+
+    text, keyboard = build_results_view(user_id)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router_dp.callback_query(F.data == "page:next")
+async def on_page_next(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id
+    progress = get_progress(user_id)
+    new_page = progress["page"] + 1
+    update_view_settings(user_id, page=new_page)
+
+    # build_results_view сам сделает clamp, если new_page вышел за границы.
+    text, keyboard = build_results_view(user_id)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router_dp.callback_query(F.data == "page:noop")
+async def on_page_noop(callback: CallbackQuery) -> None:
+    await callback.answer()
+
+
+@router_dp.callback_query(F.data == "filter:open")
+async def on_filter_open(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id
+    # Если пользователь зашёл в меню — снимаем флаг ожидания ввода.
+    update_view_settings(user_id, view_state=None)
+    text, keyboard = build_filter_menu(user_id)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+
+@router_dp.callback_query(F.data == "filter:set_min")
+async def on_filter_set_min(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id
+    update_view_settings(user_id, view_state=VIEW_STATE_AWAIT_MIN)
     await callback.message.edit_text(
-        "Ваш сохраненный результат:\n\n"
-        f"{progress['result_text']}",
-        reply_markup=finish_keyboard(),
+        "Введите минимальную цену целым числом (например, 5000).\n"
+        "Отправьте 0, чтобы убрать ограничение снизу."
     )
+    await callback.answer()
+
+
+@router_dp.callback_query(F.data == "filter:set_max")
+async def on_filter_set_max(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id
+    update_view_settings(user_id, view_state=VIEW_STATE_AWAIT_MAX)
+    await callback.message.edit_text(
+        "Введите максимальную цену целым числом (например, 50000).\n"
+        "Отправьте 0, чтобы убрать ограничение сверху."
+    )
+    await callback.answer()
+
+
+@router_dp.callback_query(F.data == "filter:reset")
+async def on_filter_reset(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id
+    update_view_settings(
+        user_id,
+        price_min=None,
+        price_max=None,
+        view_state=None,
+        page=0,
+    )
+    text, keyboard = build_results_view(user_id)
+    await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
 
 
@@ -457,6 +857,72 @@ async def on_answer(callback: CallbackQuery) -> None:
         await send_question(callback, user_id)
 
     await callback.answer()
+
+
+@router_dp.message(F.text)
+async def on_text_message(message: Message) -> None:
+    user_id = message.from_user.id
+    progress = get_progress(user_id)
+    view_state = progress["view_state"]
+
+    if view_state not in {VIEW_STATE_AWAIT_MIN, VIEW_STATE_AWAIT_MAX}:
+        return
+
+    raw = (message.text or "").strip().replace(" ", "")
+    try:
+        value = int(raw)
+    except ValueError:
+        await message.answer(
+            "Не удалось распознать число. Введите целое неотрицательное число, "
+            "например 5000. Или отправьте 0, чтобы убрать ограничение."
+        )
+        return
+
+    if value < 0:
+        await message.answer("Значение не может быть отрицательным. Попробуйте ещё раз.")
+        return
+
+    new_value: Optional[int] = None if value == 0 else value
+
+    if view_state == VIEW_STATE_AWAIT_MIN:
+        # Проверим согласованность с максимумом.
+        if (
+            new_value is not None
+            and progress["price_max"] is not None
+            and new_value > progress["price_max"]
+        ):
+            await message.answer(
+                f"Минимум ({new_value}) не может быть больше текущего "
+                f"максимума ({progress['price_max']}). Введите другое значение."
+            )
+            return
+        update_view_settings(
+            user_id,
+            price_min=new_value,
+            view_state=None,
+            page=0,
+        )
+    else:  # VIEW_STATE_AWAIT_MAX
+        if (
+            new_value is not None
+            and progress["price_min"] is not None
+            and new_value < progress["price_min"]
+        ):
+            await message.answer(
+                f"Максимум ({new_value}) не может быть меньше текущего "
+                f"минимума ({progress['price_min']}). Введите другое значение."
+            )
+            return
+        update_view_settings(
+            user_id,
+            price_max=new_value,
+            view_state=None,
+            page=0,
+        )
+
+    text, keyboard = build_results_view(user_id)
+    await message.answer("Фильтр обновлён.\n\n" + text, reply_markup=keyboard)
+
 
 async def main() -> None:
     load_dotenv()
