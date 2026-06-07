@@ -57,45 +57,45 @@ QUESTIONS: List[Question] = [
     Question(1, "Инженер", "Социолог"),
     Question(2, "Кондитер", "Священнослужитель"),
     Question(3, "Повар", "Статистик"),
-    Question(4, "Фотограф", "Торговый администратор"),
-    Question(5, "Механик", "Дизайнер"),
-    Question(6, "Философ", "Врач"),
-    Question(7, "Эколог", "Бухгалтер"),
-    Question(8, "Программист", "Адвокат"),
-    Question(9, "Кинолог", "Литературный переводчик"),
-    Question(10, "Страховой агент", "Архивист"),
-    Question(11, "Тренер", "Телерепортер"),
-    Question(12, "Следователь", "Искусствовед"),
-    Question(13, "Нотариус", "Брокер"),
-    Question(14, "Оператор ЭВМ", "Манекенщица"),
-    Question(15, "Фотокорреспондент", "Реставратор"),
-    Question(16, "Озеленитель", "Биолог-исследователь"),
-    Question(17, "Водитель", "Бортпроводник"),
-    Question(18, "Метролог", "Картограф"),
-    Question(19, "Радиомонтажник", "Художник по дереву"),
-    Question(20, "Геолог", "Дипломат"),
-    Question(21, "Журналист", "Режиссер"),
-    Question(22, "Библиограф", "Аудитор"),
-    Question(23, "Фармацевт", "Юрисконсульт"),
-    Question(24, "Генетик", "Архитектор"),
-    Question(25, "Продавец", "Оператор почтовой связи"),
-    Question(26, "Социальный работник", "Предприниматель"),
-    Question(27, "Преподаватель вуза", "Музыкант-исполнитель"),
-    Question(28, "Экономист", "Менеджер"),
-    Question(29, "Корректор", "Дирижер"),
-    Question(30, "Инспектор таможни", "Художник-модельер"),
-    Question(31, "Телефонист", "Орнитолог"),
-    Question(32, "Агроном", "Топограф"),
-    Question(33, "Лесник", "Директор"),
-    Question(34, "Мастер по пошиву одежды", "Хореограф"),
-    Question(35, "Историк", "Инспектор ГАИ"),
-    Question(36, "Антрополог", "Экскурсовод"),
-    Question(37, "Вирусолог", "Актер"),
-    Question(38, "Официант", "Товаровед"),
-    Question(39, "Главный бухгалтер", "Инспектор уголовного розыска"),
-    Question(40, "Парикмахер-модельер", "Психолог"),
-    Question(41, "Пчеловод", "Коммерсант"),
-    Question(42, "Судья", "Стенографист"),
+    # Question(4, "Фотограф", "Торговый администратор"),
+    # Question(5, "Механик", "Дизайнер"),
+    # Question(6, "Философ", "Врач"),
+    # Question(7, "Эколог", "Бухгалтер"),
+    # Question(8, "Программист", "Адвокат"),
+    # Question(9, "Кинолог", "Литературный переводчик"),
+    # Question(10, "Страховой агент", "Архивист"),
+    # Question(11, "Тренер", "Телерепортер"),
+    # Question(12, "Следователь", "Искусствовед"),
+    # Question(13, "Нотариус", "Брокер"),
+    # Question(14, "Оператор ЭВМ", "Манекенщица"),
+    # Question(15, "Фотокорреспондент", "Реставратор"),
+    # Question(16, "Озеленитель", "Биолог-исследователь"),
+    # Question(17, "Водитель", "Бортпроводник"),
+    # Question(18, "Метролог", "Картограф"),
+    # Question(19, "Радиомонтажник", "Художник по дереву"),
+    # Question(20, "Геолог", "Дипломат"),
+    # Question(21, "Журналист", "Режиссер"),
+    # Question(22, "Библиограф", "Аудитор"),
+    # Question(23, "Фармацевт", "Юрисконсульт"),
+    # Question(24, "Генетик", "Архитектор"),
+    # Question(25, "Продавец", "Оператор почтовой связи"),
+    # Question(26, "Социальный работник", "Предприниматель"),
+    # Question(27, "Преподаватель вуза", "Музыкант-исполнитель"),
+    # Question(28, "Экономист", "Менеджер"),
+    # Question(29, "Корректор", "Дирижер"),
+    # Question(30, "Инспектор таможни", "Художник-модельер"),
+    # Question(31, "Телефонист", "Орнитолог"),
+    # Question(32, "Агроном", "Топограф"),
+    # Question(33, "Лесник", "Директор"),
+    # Question(34, "Мастер по пошиву одежды", "Хореограф"),
+    # Question(35, "Историк", "Инспектор ГАИ"),
+    # Question(36, "Антрополог", "Экскурсовод"),
+    # Question(37, "Вирусолог", "Актер"),
+    # Question(38, "Официант", "Товаровед"),
+    # Question(39, "Главный бухгалтер", "Инспектор уголовного розыска"),
+    # Question(40, "Парикмахер-модельер", "Психолог"),
+    # Question(41, "Пчеловод", "Коммерсант"),
+    # Question(42, "Судья", "Стенографист"),
 ]
 
 QUESTIONS_BY_NUMBER = {q.number: q for q in QUESTIONS}
@@ -126,11 +126,20 @@ def init_db() -> None:
                 current_question INTEGER NOT NULL DEFAULT 1,
                 answers_json TEXT NOT NULL DEFAULT '{}',
                 completed INTEGER NOT NULL DEFAULT 0,
-                result_text TEXT
+                result_text TEXT,
+                sort_order TEXT NOT NULL DEFAULT 'asc',
+                price_min INTEGER,
+                price_max INTEGER,
+                view_state TEXT,
+                page INTEGER NOT NULL DEFAULT 0,
+                liked_ids_json TEXT NOT NULL DEFAULT '[]'
             )
             """
         )
 
+        # Идемпотентные миграции для случая, если БД уже существовала со
+        # старой схемой. Если таблица только что создана выше, цикл просто
+        # ничего не делает.
         existing = _table_columns(conn, "user_progress")
         migrations: List[Tuple[str, str]] = [
             ("sort_order", "TEXT NOT NULL DEFAULT 'asc'"),
@@ -138,6 +147,7 @@ def init_db() -> None:
             ("price_max", "INTEGER"),
             ("view_state", "TEXT"),
             ("page", "INTEGER NOT NULL DEFAULT 0"),
+            ("liked_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
         ]
         for column, ddl in migrations:
             if column not in existing:
@@ -152,7 +162,7 @@ def get_progress(user_id: int) -> dict:
         row = conn.execute(
             """
             SELECT user_id, current_question, answers_json, completed, result_text,
-                   sort_order, price_min, price_max, view_state, page
+                   sort_order, price_min, price_max, view_state, page, liked_ids_json
             FROM user_progress
             WHERE user_id = ?
             """,
@@ -171,6 +181,7 @@ def get_progress(user_id: int) -> dict:
             "price_max": None,
             "view_state": None,
             "page": 0,
+            "liked_ids": [],
         }
 
     return {
@@ -184,6 +195,7 @@ def get_progress(user_id: int) -> dict:
         "price_max": row["price_max"],
         "view_state": row["view_state"],
         "page": row["page"] or 0,
+        "liked_ids": deserialize_liked_ids(row["liked_ids_json"]),
     }
 
 
@@ -294,6 +306,61 @@ def deserialize_result_ids(raw: Optional[str]) -> List[int]:
         except (TypeError, ValueError):
             continue
     return result
+
+
+def serialize_liked_ids(ids: List[int]) -> str:
+    return json.dumps(ids, ensure_ascii=False)
+
+
+def deserialize_liked_ids(raw: Optional[str]) -> List[int]:
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    result: List[int] = []
+    for item in data:
+        try:
+            result.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def toggle_like(user_id: int, rec_id: int) -> bool:
+    """Переключает лайк для рекомендации. Возвращает новое состояние."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO user_progress (user_id)
+            VALUES (?)
+            ON CONFLICT(user_id) DO NOTHING
+            """,
+            (user_id,),
+        )
+        row = conn.execute(
+            "SELECT liked_ids_json FROM user_progress WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+        current = deserialize_liked_ids(row[0] if row else None)
+
+        if rec_id in current:
+            current.remove(rec_id)
+            new_state = False
+        else:
+            current.append(rec_id)
+            new_state = True
+
+        conn.execute(
+            "UPDATE user_progress SET liked_ids_json = ? WHERE user_id = ?",
+            (serialize_liked_ids(current), user_id),
+        )
+        conn.commit()
+
+    return new_state
 
 
 def process_test_results(
@@ -504,15 +571,23 @@ def build_results_view(user_id: int) -> Tuple[str, InlineKeyboardMarkup]:
     return text, InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def build_recommendation_view(rec: Recommendation) -> Tuple[str, InlineKeyboardMarkup]:
+def build_recommendation_view(
+    rec: Recommendation,
+    is_liked: bool,
+) -> Tuple[str, InlineKeyboardMarkup]:
     text = (
         f"{rec.title}\n\n"
         f"{rec.description}\n\n"
         f"Стоимость: {_format_price(rec.price)}"
     )
+    like_button = InlineKeyboardButton(
+        text="♥ В избранном" if is_liked else "♡ Добавить в избранное",
+        callback_data=f"like:{rec.id}",
+    )
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="← К списку", callback_data="results:back")]
+            [like_button],
+            [InlineKeyboardButton(text="← К списку", callback_data="results:back")],
         ]
     )
     return text, keyboard
@@ -702,6 +777,7 @@ async def on_results_back(callback: CallbackQuery) -> None:
 
 @router_dp.callback_query(F.data.startswith("rec:"))
 async def on_recommendation_details(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id
     try:
         _, rec_id_raw = callback.data.split(":", 1)
         rec_id = int(rec_id_raw)
@@ -714,9 +790,36 @@ async def on_recommendation_details(callback: CallbackQuery) -> None:
         await callback.answer("Вариант не найден.", show_alert=True)
         return
 
-    text, keyboard = build_recommendation_view(rec)
+    progress = get_progress(user_id)
+    is_liked = rec_id in progress["liked_ids"]
+    text, keyboard = build_recommendation_view(rec, is_liked=is_liked)
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
+
+
+@router_dp.callback_query(F.data.startswith("like:"))
+async def on_like_toggle(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id
+
+    try:
+        _, rec_id_raw = callback.data.split(":", 1)
+        rec_id = int(rec_id_raw)
+    except ValueError:
+        await callback.answer("Некорректный лайк.", show_alert=True)
+        return
+
+    rec = RECOMMENDATIONS_REPO.get_by_id(rec_id)
+    if rec is None:
+        await callback.answer("Вариант не найден.", show_alert=True)
+        return
+
+    new_state = toggle_like(user_id, rec_id)
+
+    text, keyboard = build_recommendation_view(rec, is_liked=new_state)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer(
+        "Добавлено в избранное" if new_state else "Убрано из избранного"
+    )
 
 
 @router_dp.callback_query(F.data == "sort:toggle")
