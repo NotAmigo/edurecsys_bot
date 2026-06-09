@@ -9,6 +9,12 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
+from logic import analyze_test
+
+from repository import InMemoryRecommendationRepository
+
+from repository_pandas import DataFrameRecommendationRepository
+
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import (
@@ -20,8 +26,6 @@ from aiogram.types import (
 from dotenv import load_dotenv
 
 from repository import (
-    InMemoryRecommendationRepository,
-    MOCK_RECOMMENDATIONS,
     Recommendation,
     RecommendationRepository,
 )
@@ -57,45 +61,45 @@ QUESTIONS: List[Question] = [
     Question(1, "Инженер", "Социолог"),
     Question(2, "Кондитер", "Священнослужитель"),
     Question(3, "Повар", "Статистик"),
-    # Question(4, "Фотограф", "Торговый администратор"),
-    # Question(5, "Механик", "Дизайнер"),
-    # Question(6, "Философ", "Врач"),
-    # Question(7, "Эколог", "Бухгалтер"),
-    # Question(8, "Программист", "Адвокат"),
-    # Question(9, "Кинолог", "Литературный переводчик"),
-    # Question(10, "Страховой агент", "Архивист"),
-    # Question(11, "Тренер", "Телерепортер"),
-    # Question(12, "Следователь", "Искусствовед"),
-    # Question(13, "Нотариус", "Брокер"),
-    # Question(14, "Оператор ЭВМ", "Манекенщица"),
-    # Question(15, "Фотокорреспондент", "Реставратор"),
-    # Question(16, "Озеленитель", "Биолог-исследователь"),
-    # Question(17, "Водитель", "Бортпроводник"),
-    # Question(18, "Метролог", "Картограф"),
-    # Question(19, "Радиомонтажник", "Художник по дереву"),
-    # Question(20, "Геолог", "Дипломат"),
-    # Question(21, "Журналист", "Режиссер"),
-    # Question(22, "Библиограф", "Аудитор"),
-    # Question(23, "Фармацевт", "Юрисконсульт"),
-    # Question(24, "Генетик", "Архитектор"),
-    # Question(25, "Продавец", "Оператор почтовой связи"),
-    # Question(26, "Социальный работник", "Предприниматель"),
-    # Question(27, "Преподаватель вуза", "Музыкант-исполнитель"),
-    # Question(28, "Экономист", "Менеджер"),
-    # Question(29, "Корректор", "Дирижер"),
-    # Question(30, "Инспектор таможни", "Художник-модельер"),
-    # Question(31, "Телефонист", "Орнитолог"),
-    # Question(32, "Агроном", "Топограф"),
-    # Question(33, "Лесник", "Директор"),
-    # Question(34, "Мастер по пошиву одежды", "Хореограф"),
-    # Question(35, "Историк", "Инспектор ГАИ"),
-    # Question(36, "Антрополог", "Экскурсовод"),
-    # Question(37, "Вирусолог", "Актер"),
-    # Question(38, "Официант", "Товаровед"),
-    # Question(39, "Главный бухгалтер", "Инспектор уголовного розыска"),
-    # Question(40, "Парикмахер-модельер", "Психолог"),
-    # Question(41, "Пчеловод", "Коммерсант"),
-    # Question(42, "Судья", "Стенографист"),
+    Question(4, "Фотограф", "Торговый администратор"),
+    Question(5, "Механик", "Дизайнер"),
+    Question(6, "Философ", "Врач"),
+    Question(7, "Эколог", "Бухгалтер"),
+    Question(8, "Программист", "Адвокат"),
+    Question(9, "Кинолог", "Литературный переводчик"),
+    Question(10, "Страховой агент", "Архивист"),
+    Question(11, "Тренер", "Телерепортер"),
+    Question(12, "Следователь", "Искусствовед"),
+    Question(13, "Нотариус", "Брокер"),
+    Question(14, "Оператор ЭВМ", "Манекенщица"),
+    Question(15, "Фотокорреспондент", "Реставратор"),
+    Question(16, "Озеленитель", "Биолог-исследователь"),
+    Question(17, "Водитель", "Бортпроводник"),
+    Question(18, "Метролог", "Картограф"),
+    Question(19, "Радиомонтажник", "Художник по дереву"),
+    Question(20, "Геолог", "Дипломат"),
+    Question(21, "Журналист", "Режиссер"),
+    Question(22, "Библиограф", "Аудитор"),
+    Question(23, "Фармацевт", "Юрисконсульт"),
+    Question(24, "Генетик", "Архитектор"),
+    Question(25, "Продавец", "Оператор почтовой связи"),
+    Question(26, "Социальный работник", "Предприниматель"),
+    Question(27, "Преподаватель вуза", "Музыкант-исполнитель"),
+    Question(28, "Экономист", "Менеджер"),
+    Question(29, "Корректор", "Дирижер"),
+    Question(30, "Инспектор таможни", "Художник-модельер"),
+    Question(31, "Телефонист", "Орнитолог"),
+    Question(32, "Агроном", "Топограф"),
+    Question(33, "Лесник", "Директор"),
+    Question(34, "Мастер по пошиву одежды", "Хореограф"),
+    Question(35, "Историк", "Инспектор ГАИ"),
+    Question(36, "Антрополог", "Экскурсовод"),
+    Question(37, "Вирусолог", "Актер"),
+    Question(38, "Официант", "Товаровед"),
+    Question(39, "Главный бухгалтер", "Инспектор уголовного розыска"),
+    Question(40, "Парикмахер-модельер", "Психолог"),
+    Question(41, "Пчеловод", "Коммерсант"),
+    Question(42, "Судья", "Стенографист"),
 ]
 
 QUESTIONS_BY_NUMBER = {q.number: q for q in QUESTIONS}
@@ -105,12 +109,6 @@ PAGE_SIZE = 10
 
 VIEW_STATE_AWAIT_MIN = "await_min"
 VIEW_STATE_AWAIT_MAX = "await_max"
-
-
-RECOMMENDATIONS_REPO: RecommendationRepository = InMemoryRecommendationRepository(
-    MOCK_RECOMMENDATIONS
-)
-
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
@@ -127,12 +125,13 @@ def init_db() -> None:
                 answers_json TEXT NOT NULL DEFAULT '{}',
                 completed INTEGER NOT NULL DEFAULT 0,
                 result_text TEXT,
-                sort_order TEXT NOT NULL DEFAULT 'asc',
+                sort_order TEXT,
                 price_min INTEGER,
                 price_max INTEGER,
                 view_state TEXT,
                 page INTEGER NOT NULL DEFAULT 0,
-                liked_ids_json TEXT NOT NULL DEFAULT '[]'
+                liked_ids_json TEXT NOT NULL DEFAULT '[]',
+                archetypes_json TEXT NOT NULL DEFAULT '[]'
             )
             """
         )
@@ -142,17 +141,20 @@ def init_db() -> None:
         # ничего не делает.
         existing = _table_columns(conn, "user_progress")
         migrations: List[Tuple[str, str]] = [
-            ("sort_order", "TEXT NOT NULL DEFAULT 'asc'"),
+            ("sort_order", "TEXT"),
             ("price_min", "INTEGER"),
             ("price_max", "INTEGER"),
             ("view_state", "TEXT"),
             ("page", "INTEGER NOT NULL DEFAULT 0"),
             ("liked_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
+            ("archetypes_json", "TEXT NOT NULL DEFAULT '[]'"),
+            ("recommendations_json", "TEXT NOT NULL DEFAULT '[]'"),
         ]
         for column, ddl in migrations:
             if column not in existing:
                 conn.execute(f"ALTER TABLE user_progress ADD COLUMN {column} {ddl}")
-
+        conn.execute(
+            "UPDATE user_progress SET sort_order = NULL WHERE sort_order = 'asc'")
         conn.commit()
 
 
@@ -162,7 +164,8 @@ def get_progress(user_id: int) -> dict:
         row = conn.execute(
             """
             SELECT user_id, current_question, answers_json, completed, result_text,
-                   sort_order, price_min, price_max, view_state, page, liked_ids_json
+                   sort_order, price_min, price_max, view_state, page, liked_ids_json, 
+                   archetypes_json, recommendations_json
             FROM user_progress
             WHERE user_id = ?
             """,
@@ -176,12 +179,14 @@ def get_progress(user_id: int) -> dict:
             "answers": {},
             "completed": False,
             "result_text": None,
-            "sort_order": "asc",
+            "sort_order": None,
             "price_min": None,
             "price_max": None,
             "view_state": None,
             "page": 0,
             "liked_ids": [],
+            "archetypes": [],
+            "recommendations_json": []
         }
 
     return {
@@ -190,12 +195,14 @@ def get_progress(user_id: int) -> dict:
         "answers": json.loads(row["answers_json"]),
         "completed": bool(row["completed"]),
         "result_text": row["result_text"],
-        "sort_order": row["sort_order"] or "asc",
+        "sort_order": row["sort_order"] or None,
         "price_min": row["price_min"],
         "price_max": row["price_max"],
         "view_state": row["view_state"],
         "page": row["page"] or 0,
         "liked_ids": deserialize_liked_ids(row["liked_ids_json"]),
+        "archetypes": deserialize_archetypes(row["archetypes_json"]),
+        "recommendations_json": row["recommendations_json"]
     }
 
 
@@ -205,6 +212,8 @@ def save_progress(
     answers: Dict[str, str],
     completed: bool = False,
     result_text: str | None = None,
+    archetypes: List[str] | None = None,
+    recommendations: List[Recommendation] | None = None
 ) -> None:
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute(
@@ -231,7 +240,26 @@ def save_progress(
                 result_text,
             ),
         )
+        if archetypes is not None:
+            conn.execute(
+                "UPDATE user_progress SET archetypes_json = ? WHERE user_id = ?",
+                (serialize_archetypes(archetypes), user_id),
+            )
+        if recommendations is not None:
+            conn.execute(
+                "UPDATE user_progress SET recommendations_json = ? WHERE user_id = ?",
+                (recommendations_to_json(recommendations), user_id),
+            )
         conn.commit()
+
+
+def get_user_repo(user_id: int) -> RecommendationRepository | None:
+    progress = get_progress(user_id)
+    raw = progress.get("recommendations_json")
+    recs = recommendations_from_json(raw)
+    if not recs:
+        return None
+    return InMemoryRecommendationRepository(recs)
 
 
 def reset_progress(user_id: int) -> None:
@@ -241,16 +269,20 @@ def reset_progress(user_id: int) -> None:
         answers={},
         completed=False,
         result_text=None,
+        archetypes=[]
     )
     update_view_settings(
         user_id,
-        sort_order="asc",
+        sort_order=None,
         price_min=None,
         price_max=None,
         view_state=None,
         page=0,
     )
 
+
+def get_result_ids(all_recs: list):
+    return [r.id for r in all_recs]
 
 def update_view_settings(user_id: int, **fields: Any) -> None:
     """Точечное обновление view-настроек пользователя.
@@ -284,6 +316,20 @@ def update_view_settings(user_id: int, **fields: Any) -> None:
         )
         conn.commit()
 
+
+def serialize_archetypes(archetypes: List[str]) -> str:
+    return json.dumps(archetypes, ensure_ascii=False)
+
+def deserialize_archetypes(raw: Optional[str]) -> List[str]:
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    return [str(item) for item in data]
 
 def serialize_result_ids(ids: List[int]) -> str:
     return json.dumps(ids, ensure_ascii=False)
@@ -329,6 +375,34 @@ def deserialize_liked_ids(raw: Optional[str]) -> List[int]:
             continue
     return result
 
+def recommendations_to_json(recs: List[Recommendation]) -> str:
+    return json.dumps([{
+        "id": r.id,
+        "title": r.title,
+        "description": r.description,
+        "price": r.price,
+        "url": r.url
+    } for r in recs], ensure_ascii=False)
+
+def recommendations_from_json(raw: Optional[str]) -> List[Recommendation]:
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    recs = []
+    for item in data:
+        if isinstance(item, dict):
+            recs.append(Recommendation(
+                id=int(item.get("id", 0)),
+                title=str(item.get("title", "")),
+                description=str(item.get("description", "")),
+                price=int(item.get("price", 0)),
+                url=str(item.get("url", ""))
+            ))
+    return recs
+
 
 def toggle_like(user_id: int, rec_id: int) -> bool:
     """Переключает лайк для рекомендации. Возвращает новое состояние."""
@@ -373,7 +447,7 @@ def process_test_results(
     Сейчас просто возвращает все id из репозитория. Когда появится реальная
     модель, эта функция будет вызывать её и возвращать отобранные id.
     """
-    _ = answers  # пока не используем
+    #_ = answers  # пока не используем
     return [item.id for item in repo.list_all()]
 
 
@@ -464,6 +538,16 @@ def _sort_arrow(sort_order: str) -> str:
 
 def build_results_view(user_id: int) -> Tuple[str, InlineKeyboardMarkup]:
     progress = get_progress(user_id)
+    archetypes = progress.get("archetypes", [])
+
+    repo = get_user_repo(user_id)
+    if repo is None:
+        text = "Результаты не найдены. Пожалуйста, пройдите тест заново."
+        return text, finish_keyboard()
+
+    archetypes_text = ""
+    if archetypes:
+        archetypes_text = f"Ваши приоритетные архетипы: {', '.join(archetypes)}\n\n"
 
     result_ids = deserialize_result_ids(progress["result_text"])
     if not result_ids:
@@ -478,7 +562,7 @@ def build_results_view(user_id: int) -> Tuple[str, InlineKeyboardMarkup]:
     price_max = progress["price_max"]
     page = progress["page"]
 
-    query = RECOMMENDATIONS_REPO.query(
+    query = repo.query(
         ids=result_ids,
         price_min=price_min,
         price_max=price_max,
@@ -494,7 +578,7 @@ def build_results_view(user_id: int) -> Tuple[str, InlineKeyboardMarkup]:
     if page >= total_pages:
         page = total_pages - 1
         update_view_settings(user_id, page=page)
-        query = RECOMMENDATIONS_REPO.query(
+        query = repo.query(
             ids=result_ids,
             price_min=price_min,
             price_max=price_max,
@@ -504,21 +588,22 @@ def build_results_view(user_id: int) -> Tuple[str, InlineKeyboardMarkup]:
         )
 
     if total == 0:
-        text = (
+        text = archetypes_text + (
             "По заданному фильтру ничего не найдено.\n"
             f"Фильтр: {_format_filter(price_min, price_max)}\n\n"
             "Попробуйте изменить или сбросить фильтр."
         )
     else:
-        sort_label = (
-            "по возрастанию цены" if sort_order == "asc" else "по убыванию цены"
-        )
-        text = (
+        sort_text = ""
+        if sort_order is not None:
+            sort_label = "по возрастанию цены" if sort_order == "asc" else "по убыванию цены"
+            sort_text = f"Сортировка: {_sort_arrow(sort_order)} {sort_label}\n"
+        text = archetypes_text + (
             f"Найдено результатов: {total}\n"
-            f"Сортировка: {_sort_arrow(sort_order)} {sort_label}\n"
+            f"{sort_text}"
             f"Фильтр: {_format_filter(price_min, price_max)}\n"
             f"Страница: {page + 1} / {total_pages}\n\n"
-            "Нажмите на интересующий вариант, чтобы посмотреть подробности."
+            "Нажмите на интересующий вариант, чтобы посмотреть подробности или добавить в Избранное."
         )
 
     rows: List[List[InlineKeyboardButton]] = []
@@ -549,12 +634,14 @@ def build_results_view(user_id: int) -> Tuple[str, InlineKeyboardMarkup]:
         )
 
     # Управление.
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text=f"Сортировка {_sort_arrow(sort_order)}",
-                callback_data="sort:toggle",
-            ),
+    if sort_order is None:
+        sort_button_text = "Сортировать"
+    elif sort_order == "asc":
+        sort_button_text = "Сортировка ↑"
+    else:
+        sort_button_text = "Сортировка ↓"
+    rows.append([
+            InlineKeyboardButton(text=sort_button_text, callback_data="sort:toggle"),
             InlineKeyboardButton(text="Фильтр цены", callback_data="filter:open"),
         ]
     )
@@ -584,12 +671,13 @@ def build_recommendation_view(
         text="♥ В избранном" if is_liked else "♡ Добавить в избранное",
         callback_data=f"like:{rec.id}",
     )
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [like_button],
-            [InlineKeyboardButton(text="← К списку", callback_data="results:back")],
-        ]
-    )
+    buttons = [[like_button]]
+    if rec.url:
+        buttons.append(
+            [InlineKeyboardButton(text="Перейти на сайт", url=rec.url)])
+    buttons.append(
+        [InlineKeyboardButton(text="← К списку", callback_data="results:back")])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return text, keyboard
 
 
@@ -670,8 +758,10 @@ async def finish_test(message_or_callback: Message | CallbackQuery, user_id: int
             await message_or_callback.answer(text)
 
         return
-
-    result_ids = process_test_results(answers, RECOMMENDATIONS_REPO)
+    df, archetypes = analyze_test(answers)
+    repo = DataFrameRecommendationRepository(df)
+    all_recs = repo.list_all()
+    result_ids = get_result_ids(all_recs)
 
     save_progress(
         user_id=user_id,
@@ -679,11 +769,13 @@ async def finish_test(message_or_callback: Message | CallbackQuery, user_id: int
         answers=answers,
         completed=True,
         result_text=serialize_result_ids(result_ids),
+        archetypes=archetypes,
+        recommendations=all_recs,
     )
     # Сбрасываем view-настройки на дефолтные для новой выдачи.
     update_view_settings(
         user_id,
-        sort_order="asc",
+        sort_order=None,
         price_min=None,
         price_max=None,
         view_state=None,
@@ -785,7 +877,7 @@ async def on_recommendation_details(callback: CallbackQuery) -> None:
         await callback.answer("Некорректный идентификатор.", show_alert=True)
         return
 
-    rec = RECOMMENDATIONS_REPO.get_by_id(rec_id)
+    rec = get_user_repo(user_id).get_by_id(rec_id)
     if rec is None:
         await callback.answer("Вариант не найден.", show_alert=True)
         return
@@ -808,7 +900,7 @@ async def on_like_toggle(callback: CallbackQuery) -> None:
         await callback.answer("Некорректный лайк.", show_alert=True)
         return
 
-    rec = RECOMMENDATIONS_REPO.get_by_id(rec_id)
+    rec = get_user_repo(user_id).get_by_id(rec_id)
     if rec is None:
         await callback.answer("Вариант не найден.", show_alert=True)
         return
@@ -826,7 +918,13 @@ async def on_like_toggle(callback: CallbackQuery) -> None:
 async def on_sort_toggle(callback: CallbackQuery) -> None:
     user_id = callback.from_user.id
     progress = get_progress(user_id)
-    new_order = "desc" if progress["sort_order"] == "asc" else "asc"
+    current = progress["sort_order"]
+    if current is None:
+        new_order = "asc"
+    elif current == "asc":
+        new_order = "desc"
+    else:
+        new_order = None
     update_view_settings(user_id, sort_order=new_order, page=0)
 
     text, keyboard = build_results_view(user_id)
