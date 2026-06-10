@@ -38,6 +38,7 @@ class DataFrameRecommendationRepository(RecommendationRepository):
             title=str(row["title"]),
             description=str(row["description"]),
             price=int(row["price"]),
+            url=str(row["url"])
         )
 
     def list_all(self) -> List[Recommendation]:
@@ -70,7 +71,10 @@ class DataFrameRecommendationRepository(RecommendationRepository):
         if price_max is not None:
             df = df[df["price"] <= price_max]
 
-        df = df.sort_values("price", ascending=(sort_order == "asc"))
+        if sort_order == "asc":
+            df = df.sort_values("price")
+        elif sort_order == "desc":
+            df = df.sort_values("price", ascending=False)
 
         total = int(len(df))
 
